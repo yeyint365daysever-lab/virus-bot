@@ -17,46 +17,30 @@ def run_flask():
     app.run(host='0.0.0.0', port=port)
 
 # ---------------------------------------------------------
-# STICKER FILE IDs & GAME ASSETS MAPPING
+# GAME STATE & ASSETS
 # ---------------------------------------------------------
-# Replace these placeholder file_ids with your actual custom sticker file_ids
 STICKERS = {
-    # Organs
     "organ_red": "CAACAgIAAxkBAA...",
     "organ_blue": "CAACAgIAAxkBAA...",
     "organ_green": "CAACAgIAAxkBAA...",
     "organ_yellow": "CAACAgIAAxkBAA...",
-    # Viruses
     "virus_red": "CAACAgIAAxkBAA...",
     "virus_blue": "CAACAgIAAxkBAA...",
     "virus_green": "CAACAgIAAxkBAA...",
     "virus_yellow": "CAACAgIAAxkBAA...",
-    "virus_wild": "CAACAgIAAxkBAA...",
-    # Medicines
-    "med_red": "CAACAgIAAxkBAA...",
-    "med_blue": "CAACAgIAAxkBAA...",
-    "med_green": "CAACAgIAAxkBAA...",
-    "med_yellow": "CAACAgIAAxkBAA...",
-    "med_wild": "CAACAgIAAxkBAA...",
-    # Treatments
-    "treatment_transplant": "CAACAgIAAxkBAA...",
-    "treatment_thief": "CAACAgIAAxkBAA...",
-    "treatment_contagion": "CAACAgIAAxkBAA...",
-    "treatment_latex": "CAACAgIAAxkBAA...",
-    "treatment_error": "CAACAgIAAxkBAA..."
+    "medicine_red": "CAACAgIAAxkBAA...",
+    "medicine_blue": "CAACAgIAAxkBAA...",
+    "medicine_green": "CAACAgIAAxkBAA...",
+    "medicine_yellow": "CAACAgIAAxkBAA..."
 }
 
-# ---------------------------------------------------------
-# GAME STATE STORAGE (Simple in-memory for single match)
-# ---------------------------------------------------------
 game_state = {
     "active": False,
-    "players": [],          # List of user IDs
-    "usernames": {},        # user_id -> display name
-    "hands": {},            # user_id -> list of cards
-    "boards": {},           # user_id -> dict of organs {"red": {"status": "healthy/vaccinated/infected/destroyed", "cards": []}}
+    "players": [],
+    "usernames": {},
+    "hands": {},
+    "boards": {},
     "deck": [],
-    "discard": [],
     "current_turn_index": 0
 }
 
@@ -64,29 +48,18 @@ COLORS = ["red", "blue", "green", "yellow"]
 
 def create_deck():
     deck = []
-    # Add Organs (1 of each color per player roughly, or standard distribution)
     for color in COLORS:
         deck.extend([("organ", color)] * 5)
         deck.extend([("virus", color)] * 4)
         deck.extend([("medicine", color)] * 4)
-    # Wild cards
-    deck.extend([("virus", "wild")] * 2)
-    deck.extend([("medicine", "wild")] * 2)
-    # Treatments
-    deck.extend([("treatment", "transplant")] * 2)
-    deck.extend([("treatment", "thief")] * 2)
-    deck.extend([("treatment", "latex")] * 2)
     random.shuffle(deck)
     return deck
 
 def init_player_board():
-    return {
-        color: {"status": "empty", "medicine": 0, "virus": 0, "has_organ": False} 
-        for color in COLORS
-    }
+    return {color: {"medicine": 0, "virus": 0, "has_organ": False} for color in COLORS}
 
 # ---------------------------------------------------------
-# HANDLERS
+# BOT HANDLERS
 # ---------------------------------------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -95,10 +68,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await update.message.reply_text(
         "🦠 **Welcome to Virus!** 💊\n\n"
-        "Assemble 4 healthy organs of different colors (Red, Blue, Green, Yellow) to win!\n"
-        "Click **Join Game** to enter, and **Start Match** when everyone is ready.",
+        "Assemble 4 healthy organs of different colors to win!\n"
+        "Click **Join Game** to enter, then **Start Match**.",
         reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
+        parse_Mode="Markdown"
     )
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -106,7 +79,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     user_id = query.from_user.id
     name = query.from_user.first_name
-
     data = query.data
 
     if data == "join_game":
@@ -117,29 +89,27 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             game_state["players"].append(user_id)
             game_state["usernames"][user_id] = name
             await query.edit_message_text(
-                f"✅ {name} joined the game!\nPlayers joined: {len(game_state['players'])}\n\nClick Start Match when ready.",
+                f"✅ {name} joined!\nPlayers: {len(game_state['players'])}\n\nClick Start Match when ready.",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🎮 Join Game", callback_data="join_game")],
                     [InlineKeyboardButton("🚀 Start Match", callback_data="start_match")]
                 ])
             )
         else:
-            await query.answer("You are already in the game!", show_alert=True)
+            await query.answer("You're already in!", show_alert=True)
 
     elif data == "start_match":
-        if len(game_state["players"]) < 1: # Allow solo testing or multiplayer
-            await query.answer("Need at least 1 player to start!", show_alert=True)
+        if len(game_state["players"]) < 1:
+            await query.answer("Need at least 1 player!", show_alert=True)
             return
         
-        # Initialize Game
         game_state["active"] = True
         game_state["deck"] = create_deck()
-        game_state["discard"] = []
         game_state["boards"] = {pid: init_player_board() for pid in game_state["players"]}
         game_state["hands"] = {pid: [game_state["deck"].pop() for _ in range(3)] for pid in game_state["players"]}
         game_state["current_turn_index"] = 0
 
-        await query.edit_message_text("🎲 **Game Started!** Checking initial hands...")
+        await query.edit_message_text("🎲 **Match Started!** Check your private messages or chat for your turn.")
         await prompt_turn(context, game_state["players"][0])
 
 async def prompt_turn(context: ContextTypes.DEFAULT_TYPE, player_id: int):
@@ -153,7 +123,6 @@ async def prompt_turn(context: ContextTypes.DEFAULT_TYPE, player_id: int):
     
     keyboard.append([InlineKeyboardButton("🔄 Discard & Pass", callback_data="pass_turn")])
 
-    # Send status update to chat
     board_summary = get_board_summary_text(player_id)
     msg = f"👤 **Turn: {name}**\n\n{board_summary}\n\n**Your Hand:**"
     
@@ -167,15 +136,15 @@ async def prompt_turn(context: ContextTypes.DEFAULT_TYPE, player_id: int):
 def get_board_summary_text(player_id):
     board = game_state["boards"][player_id]
     text = "🏥 **Your Body Board:**\n"
-    for color, status_info in board.items():
+    for color, info in board.items():
         state_str = "Empty"
-        if status_info["has_organ"]:
-            if status_info["medicine"] == 2:
+        if info["has_organ"]:
+            if info["medicine"] == 2:
                 state_str = "🛡️ Immunized"
-            elif status_info["medicine"] == 1:
+            elif info["medicine"] == 1:
                 state_str = "💊 Vaccinated"
-            elif status_info["virus"] > 0:
-                state_str = f"🦠 Infected ({status_info['virus']})"
+            elif info["virus"] > 0:
+                state_str = f"🦠 Infected ({info['virus']})"
             else:
                 state_str = "❤️ Healthy Organ"
         text += f"- {color.capitalize()}: {state_str}\n"
@@ -199,59 +168,45 @@ async def game_action_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         card = hand.pop(card_idx)
         card_type, color = card
 
-        # Handle Card Logic
         board = game_state["boards"][user_id]
         if card_type == "organ":
             if not board[color]["has_organ"]:
                 board[color]["has_organ"] = True
                 await query.message.reply_text(f"Played a {color} organ!")
             else:
-                await query.message.reply_text("You already have that organ! Card discarded.")
+                await query.message.reply_text("Organ slot already filled! Card discarded.")
         elif card_type == "medicine":
             if board[color]["has_organ"] and board[color]["virus"] == 0:
                 board[color]["medicine"] += 1
-                await query.message.reply_text(f"Applied medicine to your {color} organ!")
+                await query.message.reply_text(f"Applied medicine to {color} organ!")
             else:
-                await query.message.reply_text("Cannot place medicine here. Card wasted/discarded.")
+                await query.message.reply_text("Cannot place medicine here.")
         elif card_type == "virus":
-            # For simplicity in initial play, target self or check win conditions
             board[color]["virus"] += 1
-            await query.message.reply_text(f"Infected a {color} organ!")
+            await query.message.reply_text(f"Placed virus on {color} organ!")
 
-        # Draw replacement card if deck has cards
         if game_state["deck"]:
             hand.append(game_state["deck"].pop())
 
-        # Check Win Condition (4 healthy/vaccinated/immunized organs)
-        won = check_win_condition(user_id)
-        if won:
+        # Check win condition
+        completed = sum(1 for info in board.values() if info["has_organ"] and info["virus"] == 0)
+        if completed >= 4:
             await context.bot.send_message(
                 chat_id=query.message.chat_id,
-                text=f"🏆 **{game_state['usernames'][user_id]} has won the game by completing their body!** 🎉",
+                text=f"🏆 **{game_state['usernames'][user_id]} wins the game!** 🎉",
                 parse_mode="Markdown"
             )
             game_state["active"] = False
             return
 
-        # Advance Turn
         advance_turn()
-        next_player = game_state["players"][game_state["current_turn_index"]]
-        await prompt_turn(context, next_player)
+        await prompt_turn(context, game_state["players"][game_state["current_turn_index"]])
 
     elif data == "pass_turn":
-        await query.message.reply_text("Passed turn and discarded hand cards.")
+        await query.message.reply_text("Passed turn.")
         game_state["hands"][user_id] = [game_state["deck"].pop() for _ in range(3) if game_state["deck"]]
         advance_turn()
-        next_player = game_state["players"][game_state["current_turn_index"]]
-        await prompt_turn(context, next_player)
-
-def check_win_condition(player_id):
-    board = game_state["boards"][player_id]
-    completed = 0
-    for color, info in board.items():
-        if info["has_organ"] and info["virus"] == 0:
-            completed += 1
-    return completed >= 4
+        await prompt_turn(context, game_state["players"][game_state["current_turn_index"]])
 
 def advance_turn():
     game_state["current_turn_index"] = (game_state["current_turn_index"] + 1) % len(game_state["players"])
@@ -262,14 +217,16 @@ def main():
         print("Error: BOT_TOKEN environment variable not set!")
         return
 
-    application = Application.builder().token(token).build()
+    # Start Flask web server in background thread so Render's port checker is satisfied
+    flask_thread = Thread(target=run_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
 
+    # Build and run Telegram bot on the main thread
+    application = Application.builder().token(token).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler, pattern="^(join_game|start_match)$"))
     application.add_handler(CallbackQueryHandler(game_action_handler, pattern="^(play_|pass_turn)"))
-
-    Thread(target=run_flask).daemon = True
-    Thread(target=run_flask).start()
 
     print("Bot polling started...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
